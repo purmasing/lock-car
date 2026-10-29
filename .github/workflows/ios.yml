@@ -1,0 +1,56 @@
+name: Build iOS (optional - needs Apple Developer account for a real device)
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    defaults: { run: { working-directory: app } }
+    env:
+      CERT_B64: ${{ secrets.IOS_CERT_P12_B64 }}
+      CERT_PASS: ${{ secrets.IOS_CERT_PASSWORD }}
+      PROFILE_B64: ${{ secrets.IOS_PROFILE_B64 }}
+      TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm install
+      - run: npx cap add ios
+      - run: bash scripts/patch-ios.sh
+      - run: npm run assets -- --ios
+      - run: npx cap sync ios
+      - name: Compile check (simulator, no signing)
+        run: |
+          xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO
+      - name: Archive + export IPA (only if signing secrets exist)
+        if: env.CERT_B64 != '' && env.PROFILE_B64 != ''
+        run: |
+          echo "$CERT_B64" | base64 -d > cert.p12
+          echo "$PROFILE_B64" | base64 -d > profile.mobileprovision
+          security create-keychain -p ci build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p ci build.keychain
+          security import cert.p12 -k build.keychain -P "$CERT_PASS" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci build.keychain
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin <<< "$(security cms -D -i profile.mobileprovision)")
+          NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' /dev/stdin <<< "$(security cms -D -i profile.mobileprovision)")
+          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+          cat > export.plist <<PL
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>ad-hoc</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key><dict><key>ir.smartcarlock.carcontrol</key><string>$NAME</string></dict>
+          </dict></plist>
+          PL
+          xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Release -archivePath App.xcarchive archive \
+            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER="$NAME" CODE_SIGN_IDENTITY="Apple Distribution"
+          xcodebuild -exportArchive -archivePath App.xcarchive -exportPath ipa -exportOptionsPlist export.plist
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: CarControl-ios, path: app/ipa/*.ipa, if-no-files-found: ignore }
