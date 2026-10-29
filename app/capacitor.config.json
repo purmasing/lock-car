@@ -1,0 +1,9 @@
+{
+  "appId": "ir.smartcarlock.carcontrol",
+  "appName": "Car Control",
+  "webDir": "www",
+  "server": { "androidScheme": "https", "cleartext": true },
+  "plugins": {
+    "CapacitorHttp": { "enabled": true }
+  }
+}

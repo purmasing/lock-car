@@ -1,0 +1,20 @@
+{
+  "name": "car-controller-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Car Controller - Android / iOS / Web app",
+  "scripts": {
+    "assets": "capacitor-assets generate --iconBackgroundColor \"#667eea\" --iconBackgroundColorDark \"#667eea\" --splashBackgroundColor \"#667eea\" --splashBackgroundColorDark \"#667eea\"",
+    "serve": "npx --yes http-server www -p 8080 -c-1"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/app": "^6.0.2",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/ios": "^6.2.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^6.2.0"
+  }
+}
